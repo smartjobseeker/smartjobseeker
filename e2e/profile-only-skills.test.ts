@@ -8,28 +8,23 @@
  * direction, where the same click that opens the popover immediately closes it
  * again, and nothing but a real browser will tell you.
  *
- * Deliberately non-mutating: it never completes the add, so the profile is
- * untouched and the suite is repeatable. The write paths are covered by unit
- * tests and were exercised directly against the API.
+ * Leaves the profile alone: it never completes an add, and the requests that
+ * would write are intercepted, so the suite is repeatable. The write paths are
+ * covered by unit tests and were exercised directly against the API. The one
+ * write is the job it reads, which it inserts first and deletes afterwards.
  *
  * Prerequisites: dev stack running, test user seeded (see browser.test.ts).
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loginViaUI, useBrowser } from './browser';
+import { literal, sql } from './db';
 
 /**
- * A job whose required skills are all unmatched for the test profile, so every
- * pill is the interactive "I have this" kind rather than a plain matched one.
+ * Skills no profile has. Invented, so they stay unmatched whatever the test
+ * profile holds, and every one is the interactive "I have this" kind.
  */
-const JOB_WITH_UNMATCHED_SKILLS = 2574;
-
-/**
- * A job requiring skills the profile *has* but whose stored match doesn't list
- * — the two disagree, which is ordinary: the matcher ran once, at a moment, and
- * it is an LLM.
- */
-const JOB_WITH_STALE_MATCH = 3666;
+const UNHELD_SKILLS = ['Quillmark', 'Fernwave CI', 'Tessellate DB'];
 
 /** Only unmatched pills carry this title, which is what makes them clickable. */
 const ADD_PILL = 'button[title*="add it to my profile"]';
@@ -43,12 +38,63 @@ describe('profile-only skills popover', () => {
 	// Once per suite: the context is shared, and loginViaUI navigates to /login,
 	// which redirects away once authenticated — leaving it waiting on an #email
 	// field that never appears.
+	/**
+	 * One job made for the suite and deleted after it. It requires the unheld
+	 * skills above and a few the selected profile does hold, and it has no
+	 * stored match at all, so the page has to tell the two apart from profile
+	 * data alone: the matcher's view and the profile's disagree all the time,
+	 * because the matcher ran once, at a moment, and it is an LLM.
+	 *
+	 * The suite used to point at two scraped jobs by id, and went red the day
+	 * a prune removed them from the dev database.
+	 */
+	let jobId: number | null = null;
+
 	beforeAll(async () => {
 		await loginViaUI(b.page);
+
+		// The profile the app selected at sign-in is the one the job page reads.
+		const cookie = (await b.page.context().cookies()).find((c) => c.name === 'selected_profile_id');
+		const profileId = Number(cookie?.value);
+		if (!Number.isInteger(profileId)) {
+			throw new Error('No selected_profile_id cookie after sign-in');
+		}
+
+		// Held skills that print on documents, so the editor opens with "Show on
+		// CV" on. A name with any negated tag on any of its rows is left out:
+		// the page resolves a duplicate name to its first row.
+		const held = sql(`
+			SELECT min(s.name)
+			FROM tech_skills s
+			JOIN tech_skill_categories c ON c.id = s.category_id
+			WHERE c.profile_id = ${profileId} AND trim(coalesce(s.name, '')) <> ''
+			GROUP BY lower(trim(s.name))
+			HAVING bool_and(coalesce(s.tags::text, '') NOT LIKE '%"!%')
+			ORDER BY 1
+			LIMIT 3
+		`).map(([name]) => name);
+		if (held.length === 0) {
+			throw new Error(`Profile ${profileId} has no skill shown on documents to test with`);
+		}
+
+		const required = [held[0], UNHELD_SKILLS[0], ...held.slice(1), ...UNHELD_SKILLS.slice(1)];
+		const [[id]] = sql(`
+			INSERT INTO jobs (status, title, company, job_description, skills_required, date_created)
+			VALUES ('hiring', 'E2E skill pills', 'Acme Corp',
+				'A job made by profile-only-skills.test.ts and deleted after it.',
+				${literal(JSON.stringify(required))}::json, now())
+			RETURNING id
+		`);
+		jobId = Number(id);
+	});
+
+	afterAll(() => {
+		// Matches and statuses the visit may have left cascade with it.
+		if (jobId !== null) sql(`DELETE FROM jobs WHERE id = ${jobId}`);
 	});
 
 	async function openJob() {
-		await b.page.goto(`/jobs/${JOB_WITH_UNMATCHED_SKILLS}`);
+		await b.page.goto(`/jobs/${jobId}`);
 		await b.page.waitForLoadState('networkidle');
 	}
 
@@ -136,7 +182,7 @@ describe('profile-only skills popover', () => {
 		// The pill has to decide from data the page already holds. Asking the
 		// server only once the popover is open means the answer lands mid-click,
 		// which is what made the popover appear to close itself.
-		await b.page.goto(`/jobs/${JOB_WITH_STALE_MATCH}`);
+		await b.page.goto(`/jobs/${jobId}`);
 		await b.page.waitForLoadState('networkidle');
 		await b.page.locator(KNOWN_PILL).first().waitFor({ timeout: 15000 });
 
@@ -162,7 +208,7 @@ describe('profile-only skills popover', () => {
 			});
 		});
 
-		await b.page.goto(`/jobs/${JOB_WITH_STALE_MATCH}`);
+		await b.page.goto(`/jobs/${jobId}`);
 		await b.page.waitForLoadState('networkidle');
 		const pill = b.page.locator(KNOWN_PILL).first();
 		await pill.waitFor({ state: 'visible', timeout: 15000 });
