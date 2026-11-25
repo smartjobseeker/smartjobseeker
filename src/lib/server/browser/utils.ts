@@ -57,9 +57,12 @@ export function findChromeExecutable(): string | undefined {
 }
 
 /**
- * Launch browser with a fresh context
- * Since we use persistent browser sessions, this is simplified
- * and no longer needs fingerprint injection.
+ * Launch a browser and return a fresh context in it.
+ *
+ * The browser belongs to the context: closing the context closes the browser
+ * too. Callers only ever see the context, so without this nothing could close
+ * the browser, and every CV print, page-fit check and banner left its Chrome
+ * running until the container restarted (20 of them, about 1 GB, on dev).
  */
 export async function launchBrowser(options: BrowserLaunchOptions = {}): Promise<BrowserContext> {
 	const executablePath = findChromeExecutable();
@@ -74,9 +77,24 @@ export async function launchBrowser(options: BrowserLaunchOptions = {}): Promise
 		args: options.args
 	});
 
-	const context = await browser.newContext({
-		viewport
-	});
+	let context: BrowserContext;
+	try {
+		context = await browser.newContext({ viewport });
+	} catch (err) {
+		await browser.close().catch(() => {});
+		throw err;
+	}
+
+	// Await the browser inside close() itself, so a caller's
+	// `await context.close()` returns once Chrome is gone.
+	const closeContext = context.close.bind(context);
+	context.close = async (closeOptions) => {
+		try {
+			await closeContext(closeOptions);
+		} finally {
+			await browser.close().catch(() => {});
+		}
+	};
 
 	console.log('✅ Browser context created successfully');
 	return context;
