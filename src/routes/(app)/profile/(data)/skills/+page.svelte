@@ -78,6 +78,22 @@
 	// so a save landing at the same moment as an edit could put the stored value
 	// back over the newer one.
 	let mappedCategories = $derived(mapCategories(data.categories));
+
+	/**
+	 * Every write the editor makes through the binding, put back into `$state`.
+	 *
+	 * A write that mutates a row is covered by the proxy above. A write that
+	 * assigns a whole new array is not: the derived takes the array as given,
+	 * and a row the editor built itself stays a plain object. Adding a category
+	 * is that write, and the editor then could not open the new row's name
+	 * field, because its own `$state` held a proxy of the row that never
+	 * compared equal to the row. Re-wrapping keeps the rows that already are
+	 * proxies as they are and proxies only the new one.
+	 */
+	function adoptCategories(cats: DbCategoryItem[]) {
+		const adopted = $state(cats);
+		mappedCategories = adopted;
+	}
 	let canCategoryReorder = $state(false);
 	let editorRef: SkillCategoriesEditor;
 
@@ -257,7 +273,7 @@
 	<div class="space-y-4">
 		<SkillCategoriesEditor
 			bind:this={editorRef}
-			bind:categories={mappedCategories}
+			bind:categories={() => mappedCategories, adoptCategories}
 			bind:canCategoryReorder
 			levelOptions={data.levelOptions}
 			{versionSlugs}

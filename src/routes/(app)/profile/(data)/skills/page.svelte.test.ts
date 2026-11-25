@@ -236,3 +236,28 @@ describe('skills page — the switches save themselves', () => {
 		});
 	});
 });
+
+/**
+ * A new category opens with its name field, and the name saves.
+ *
+ * The editor appends the new row by assigning a whole new array through the
+ * binding. Against the page's `$derived` that array, and the new row in it,
+ * arrived as plain objects, while the editor's `editingCategory` is `$state`
+ * and so held a proxy of the row. The two never compared equal: the row showed
+ * "Untitled category" and neither it nor its pencil ever opened the name field.
+ * Existing rows were unaffected because the page's mapping had already made
+ * them proxies.
+ */
+describe('skills page — adding a category', () => {
+	test('the new category opens for its name and saves it', async () => {
+		renderPage();
+		await fireEvent.click(screen.getByRole('button', { name: /Add category/ }));
+
+		const name = screen.getByPlaceholderText('Category name');
+		await fireEvent.input(name, { target: { value: 'Tools' } });
+		await fireEvent.click(screen.getByLabelText('Save'));
+
+		const create = posted.find((p) => p.action === 'createCategory');
+		expect(create?.body.name).toBe('Tools');
+	});
+});
