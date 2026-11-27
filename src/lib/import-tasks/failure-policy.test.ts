@@ -409,6 +409,16 @@ describe('explainAuthBlock', () => {
 		expect(e.message).not.toContain('complete the check');
 	});
 
+	it('tells the password case to sign in once, and that no password is stored', () => {
+		const e = explainAuthBlock('auth_password', ctx);
+		expect(e.title).toContain('password needed');
+		expect(e.message).toContain('asks for your password');
+		expect(e.message).toContain('not stored');
+		expect(e.message).toContain('sign in in the browser window');
+		// There is no stored password to update, and no check to complete.
+		expect(e.message).not.toMatch(/update|complete the check/i);
+	});
+
 	it('keeps every status message inside the 255-char column', () => {
 		const kinds: FailureKind[] = [
 			'auth_verification',
@@ -417,6 +427,7 @@ describe('explainAuthBlock', () => {
 			'auth_restricted',
 			'auth_terms',
 			'auth_passkey',
+			'auth_password',
 			'auth_unknown'
 		];
 		for (const kind of kinds) {

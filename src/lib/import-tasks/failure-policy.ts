@@ -469,6 +469,20 @@ export function explainAuthBlock(kind: FailureKind, ctx: ExplainContext): Explan
 					`account.`,
 				statusMessage: short('browser passkey prompt blocks the login')
 			};
+		case 'auth_password':
+			// Not `oneTimeRun` either: there is no check to complete, only a
+			// password to type, and the reader should know why nobody typed it.
+			return {
+				title: `${subject} can't log in — password needed`,
+				message:
+					`${opening}\n\n` +
+					`${ctx.platform} asks for your password. It is not stored here, so a ` +
+					`scheduled run has nothing to type and stops at the sign-in page.\n\n` +
+					`Open the task and hit Run now, then sign in in the browser window. The ` +
+					`browser stays signed in afterwards, so the scheduled runs go back to ` +
+					`working on their own.`,
+				statusMessage: short('sign in once with your password')
+			};
 		case 'auth_terms':
 			return {
 				title: `${subject} can't log in — terms need accepting`,

@@ -79,7 +79,14 @@ export const FAILURE_KINDS = [
 	 *  `device_unavailable`: the device answered, and bringing it online again
 	 *  fixes nothing. Before this kind it fell through to `unknown`, and a user
 	 *  whose own machine was the cause read "An unexpected error occurred". */
-	'device_browser_failed'
+	'device_browser_failed',
+	/** The sign-in page asks for a password. No password is stored for a job
+	 *  site, so a run stops at the box: the user types it in the browser, and
+	 *  the browser stays signed in for the runs after. An auth kind, listed
+	 *  last because kinds are append-only. Before it, these runs were
+	 *  `auth_unknown` and the notification said the cause could not be read
+	 *  from the page. */
+	'auth_password'
 ] as const;
 
 export type FailureKind = (typeof FAILURE_KINDS)[number];
@@ -101,6 +108,7 @@ export const AUTH_SETUP_FAILURE_KINDS: readonly FailureKind[] = [
 	'auth_restricted',
 	'auth_terms',
 	'auth_passkey',
+	'auth_password',
 	'auth_unknown'
 ];
 
