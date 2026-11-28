@@ -5,6 +5,21 @@ All notable changes to the Smart Job Seeker OSS project will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.51.0] - 2026-11-28
+
+9 commits since v0.50.0.
+
+### Added
+
+- Import tasks report a distinct password-required failure when a site asks for a password, instead of a generic error.
+- The scraper types your username before handing a sign-in page over to you.
+
+### Fixed
+
+- The scraper stops at a password box instead of waiting for an emailed code.
+- Newly created skill categories open by their name.
+- Headless browsers close when their session ends, so they no longer pile up.
+
 ## [0.50.0] - 2026-11-20
 
 13 commits since v0.49.0.
